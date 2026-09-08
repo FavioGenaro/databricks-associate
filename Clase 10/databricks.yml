@@ -1,0 +1,98 @@
+# Bundle "project_sdp": el mismo pipeline de la Sesión 09 (Lab 1 Explora),
+# ahora parametrizado por ambiente para poder promoverlo a otro workspace (Sesión 10).
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: project_sdp # nombre del bundle
+  uuid: eb9d4db5-1701-4c02-8b33-d63759fe1bfc # id del bundle
+
+include:
+  - resources/*.yml # recursos en formato .yml que se incluyen, en nuestro caso esta el lakeflow declarative pipeline
+
+# Variables asignadas por target más abajo. catalog es la única que cambia entre
+# dev/test/prod: los tres schemas y la ruta de landing se mantienen iguales en los
+# tres (Auto Loader siempre lee del mismo Volume de la Sesión 09; lo único que
+# cambia es el catalog donde se publican las tablas).
+variables:
+  catalog:
+    description: Catálogo de Unity Catalog donde este target publica bronze/silver/gold # descripción para documentación
+    default: dbassociate # valor por defecto
+  schema_bronze:
+    description: Schema de la capa Bronze
+    default: bronze
+  schema_silver:
+    description: Schema de la capa Silver
+    default: silver
+  schema_gold:
+    description: Schema de la capa Gold
+    default: gold
+  landing_path:
+    description: Ruta del Volume donde Auto Loader lee los lotes de clientes
+    default: /Volumes/dbassociate/default/vol_landing/input/
+
+targets:
+  dev:
+    # Mismo workspace que ya se usó en la Sesión 09, pero publica en un catalog
+    # nuevo (dbassociate_dev) en vez de reusar dbassociate: así los tres targets
+    # quedan simétricos (cada uno con su propio catalog) y este laboratorio no
+    # toca las tablas que ya corrían desde la Sesión 09. El catalog no se
+    # autocrea (a diferencia de los schemas bronze/silver/gold, que sí): hace
+    # falta CREATE CATALOG IF NOT EXISTS dbassociate_dev antes del primer
+    # deploy (Paso 4 de sesion10_setup.ipynb).
+    # Se despliega desde el panel Deployments del Git folder (sin CLI): el
+    # target vive en el mismo workspace donde está abierto ese Git folder.
+    mode: development
+    default: true
+    presets:
+      source_linked_deployment: false # indica que se cree el prefijo entre corchetes
+    workspace:
+      host: https://adb-7405615539762593.13.azuredatabricks.net/ # ruta del workspace hacia donde se hacer el despliegue.
+      # bundle.name es la variables del sistema, es más global y no esta declarada.
+      # bundle.target es el target actual, en este caso es dev.
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target} # ruta 
+    variables:
+      # definimos variables nuevamente, en este caso cuando sea dev se prioriza el valor de estas variables.
+      catalog: dbassociate_dev
+      # landing_path: /Volumes/dbassociate_dev/default/vol_landing/input/
+      landing_path: {var.landing_path} # toma el valor de las variables
+    permissions:
+      # username se obtiene de una variable reservada del sistema
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+
+  test:
+    # El "otro workspace" del taller de esta sesión: reemplazá el host por el de
+    # un segundo workspace (o el mismo workspace si estás practicando con un solo
+    # ambiente disponible, usando igual un catalog distinto para no pisar dev).
+    # El panel Deployments no puede desplegar a un host distinto del que tenés
+    # abierto, así que este target se despliega desde el Web Terminal del
+    # workspace de test (databricks bundle deploy -t test), no desde el panel.
+    # Mismo requisito que dev: CREATE CATALOG IF NOT EXISTS dbassociate_test
+    # antes del primer deploy (Paso 6).
+    mode: production
+    presets:
+      source_linked_deployment: false
+    workspace:
+      host: <url-del-otro-workspace>
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: dbassociate_test
+      landing_path: /Volumes/dbassociate_test/default/vol_landing/input/
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE
+
+  prod:
+    # Tercer ambiente, agregado para completar el modelo dev/test/prod y para que
+    # el ejemplo de CI/CD del Paso 8 (deploy -t prod, gateado por aprobación
+    # manual) apunte a un target real. Fuera del recorrido guiado de este
+    # laboratorio (Pasos 1-9): requiere un tercer workspace propio, y el catalog
+    # tampoco se autocrea (CREATE CATALOG IF NOT EXISTS dbassociate_prod).
+    mode: production
+    presets:
+      source_linked_deployment: false
+    workspace:
+      host: <url-del-otro-workspace>
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - user_name: ${workspace.current_user.userName}
+        level: CAN_MANAGE

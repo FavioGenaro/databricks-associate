@@ -1,0 +1,33 @@
+# El pipeline principal de project_sdp.
+# catalog/schema fijan el default del pipeline (usado si algún dataset no fuera
+# fully-qualified); las tablas de este proyecto sí son fully-qualified, construidas
+# en cada archivo de transformations/ a partir de las claves de configuration de abajo.
+
+resources:
+  pipelines:
+    project_sdp_etl:
+      name: project_sdp_etl
+      catalog: ${var.catalog}
+      schema: ${var.schema_bronze}
+      serverless: true
+      root_path: "../"
+
+      libraries:
+        - glob:
+            include: ../src/project_sdp_etl/transformations/**
+
+      # Expuestas como Spark config y leídas con spark.conf.get() en cada archivo
+      # de transformations/ — así el mismo código publica en un catalog distinto
+      # según el target (dev -> dbassociate, test -> dbassociate_test).
+      configuration:
+        bundle.catalog: ${var.catalog} # el valor de estas variables estan en la sección de variables de databricks.yml
+        bundle.schema_bronze: ${var.schema_bronze}
+        bundle.schema_silver: ${var.schema_silver}
+        bundle.schema_gold: ${var.schema_gold}
+        bundle.landing_path: ${var.landing_path}
+
+      # environment:
+      #   dependencies:
+      #     # We include every dependency defined by pyproject.toml by defining an editable environment
+      #     # that points to the folder where pyproject.toml is deployed.
+      #     - --editable ${workspace.file_path}
